@@ -1,0 +1,11 @@
+<div id="servers">
+  <div class="server" ng-repeat="server in servers">
+    <p class="host">{{server.host}}</p>
+    <div class="routes">
+      <div class="route" ng-repeat="route in server.routes">
+        <span class="path">{{route.path}}</span>
+        <span class="count">{{route.hits}}</span>
+      </div>
+    </div>
+  </div>
+</div>

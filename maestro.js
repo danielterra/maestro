@@ -14,6 +14,7 @@ io = io.listen(server);
 
 function Maestro (io) {
     this._servers = [];
+    this.inspectorSocket = null;
 
     this.registerServer = function (socket) {
         console.log('Creating new client for socket id: ' + socket.id);
@@ -21,6 +22,7 @@ function Maestro (io) {
         var server = new MaestroClient(socket);
 
         this._servers.push(server);
+        this.updateServers();
     };
 
     this.unregisterServer = function (socketId) {
@@ -31,12 +33,50 @@ function Maestro (io) {
                 this._servers.splice(i, 1);
             }
         };
+        this.updateServers();
     };
 
-    underscore.bindAll(this, 'unregisterServer', 'registerServer');
+    this.inspectorConnected = function (socket) {
+        this.inspectorSocket = socket;
+        this.updateServers();
+    };
+
+    this.updateServers = function () {
+        if (!this.inspectorSocket) {
+            return;
+        }
+
+        var servers = [];
+
+        for (var i = this._servers.length - 1; i >= 0; i--) {
+            var server = {
+                host: this._servers[i].host,
+                routes: []
+            };
+
+            for (var j = this._servers[i].routes.length - 1; j >= 0; j--) {
+                server.routes.push({
+                    path: this._servers[i].routes[j].path
+                });
+            };
+
+            servers.push(server);
+        };
+
+        this.inspectorSocket.emit('serversUpdated', servers);
+    };
+
+    underscore.bindAll(this, 'unregisterServer', 'registerServer', 'inspectorConnected', 'updateServers');
 
     // Add a connect listener
-    io.sockets.on('connection', this.registerServer);
+    io.sockets.on('connection', function (socket) {
+        socket.on('inspectorConnected', function () {
+            maestro.inspectorConnected(this);
+        });
+        socket.on('registerServer', function() {
+            maestro.registerServer(this);
+        });
+    });
 
     console.log('Maestro ready and listening');
 
@@ -92,6 +132,7 @@ function MaestroClient (socket) {
         for (var i = this.routes.length - 1; i >= 0; i--) {
             this.routes[i].destroy();
         };
+        maestro.updateServers();
     };
 
     this.addRoute = function (route) {
@@ -99,13 +140,14 @@ function MaestroClient (socket) {
         app.get(route, this.requestRecived);
 
         this.routes.push(maestroRoute);
+        maestro.updateServers();
     };
 
     this.requestRecived = function (req, res) {
         console.log('Proxy request for: ' + req.route.path);
         for (var i = this.routes.length - 1; i >= 0; i--) {
             if (this.routes[i].path === req.route.path) {
-                res.redirect(this.host);
+                res.redirect(this.host + req.path);
                 // this.routes[i].queueRequest({req: req, res: res});
                 // this.socket.emit('request', new MaestroRequest(this.routes[i].queue[0].req));
             }
@@ -114,6 +156,7 @@ function MaestroClient (socket) {
 
     this.setHost = function (host) {
         this.host = host;
+        maestro.updateServers();
     };
 
     underscore.bindAll(this, 'addRoute', 'requestRecived', 'setHost');
@@ -134,8 +177,10 @@ function MaestroClient (socket) {
 };
 
 
-app.get('/hello', function (req, res) {
-    res.send("Hello!");
+app.use('/inspector/', express.static('inspector/dist/'));
+
+app.get('/inspector', function (req, res) {
+    res.sendFile(__dirname + '/inspector/dist/index.html');
 });
 
 app.get('/servers', function routesCallback(req, res) {

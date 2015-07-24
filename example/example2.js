@@ -4,7 +4,7 @@ var io = require('socket.io-client');
 var socket;
 
 var host = 'http://localhost';
-var port = 3001;
+var port = 3002;
 
 var maestroHost = 'http://localhost:3000';
 
@@ -25,6 +25,7 @@ function initSocket() {
     // Add a connect listener
     socket.on('connect', function() {
         console.log('Connected!');
+        socket.emit('registerServer');
         socket.emit('setHost', host + ':' + port);
         initMaestroRoutes();
     });
@@ -39,8 +40,12 @@ function initSocket() {
 };
 
 function initMaestroRoutes() {
-    registerRoute('/inspector', function (req, res) {
-        res.sendFile(__dirname + '/dist/index.html');
+    registerRoute('/example2', function (req, res) {
+        res.send("Hello there!");
+    });
+
+    registerRoute('/example2/:name', function (req, res) {
+        res.send("Hello there " + req.params.name);
     });
 };
 
